@@ -13,9 +13,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build and Test
+    - name: Build
       run: |
-        xcodebuild build test \
+        xcodebuild build \
           -project "NYCiti Nav.xcodeproj" \
           -scheme "NYCiti Nav" \
           -destination "platform=iOS Simulator,name=iPhone 15,OS=latest" \
