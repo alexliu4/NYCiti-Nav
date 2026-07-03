@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 
 struct ContentView: View {
-    @EnvironmentObject var dataManager: StationDataManager
+    @Environment(StationDataManager.self) private var dataManager
 
     // Initial camera position centered on Bryant Park
     // Future: Center at user's current location
@@ -71,7 +71,6 @@ struct StationAnnotationView: View {
 
 #Preview {
     let manager = StationDataManager()
-    // For preview purposes, we might want to ensure it has data even if bundle loading fails in preview environment
     ContentView()
-        .environmentObject(manager)
+        .environment(manager)
 }

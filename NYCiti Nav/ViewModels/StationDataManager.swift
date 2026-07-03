@@ -1,7 +1,9 @@
 import Foundation
+import Observation
 
-class StationDataManager: ObservableObject {
-    @Published var stations: [SubwayStation] = []
+@Observable
+class StationDataManager {
+    var stations: [SubwayStation] = []
 
     init() {
         loadStations()
