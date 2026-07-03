@@ -22,17 +22,23 @@ struct SubwayStation: Codable, Identifiable {
         return .blue
     }
 
-    /// Returns the subway lines sorted by canonical MTA groupings and colors
+    /// Returns the subway lines grouped by color, with larger groups first
     var sortedLines: [String] {
-        lines.sorted { lineA, lineB in
-            let rankA = SubwayStation.sortRank(for: lineA)
-            let rankB = SubwayStation.sortRank(for: lineB)
+        // Group lines by their color rank
+        let groups = Dictionary(grouping: lines) { SubwayStation.sortRank(for: $0) }
 
-            if rankA != rankB {
-                return rankA < rankB
+        // Sort groups by size descending, then by rank ascending
+        let sortedGroupKeys = groups.keys.sorted { key1, key2 in
+            let count1 = groups[key1]?.count ?? 0
+            let count2 = groups[key2]?.count ?? 0
+            if count1 != count2 {
+                return count1 > count2
             }
-            return lineA < lineB
+            return key1 < key2
         }
+
+        // Flatten into a single array
+        return sortedGroupKeys.flatMap { groups[$0]?.sorted() ?? [] }
     }
 
     /// Provides a numerical rank for sorting lines by their MTA groups/colors

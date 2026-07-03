@@ -19,7 +19,8 @@ struct ContentView: View {
         Map(position: $cameraPosition) {
             ForEach(dataManager.stations) { station in
                 if station.lines.count > 1 {
-                    Annotation(station.name, coordinate: station.coordinate) {
+                    // Use anchor .bottom to keep the base pin at the coordinate
+                    Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
                         StationAnnotationView(
                             station: station,
                             isExpanded: selectedStationID == station.id,
@@ -52,7 +53,7 @@ struct StationAnnotationView: View {
     let onToggle: () -> Void
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        VStack(spacing: 4) {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(station.name)
@@ -60,7 +61,6 @@ struct StationAnnotationView: View {
                         .bold()
                         .fixedSize(horizontal: false, vertical: true)
 
-                    // Uses sortedLines for canonical MTA grouping
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 22))], spacing: 4) {
                         ForEach(station.sortedLines, id: \.self) { line in
                             Text(line)
@@ -77,10 +77,10 @@ struct StationAnnotationView: View {
                     .fill(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4))
                 .frame(width: 160)
-                .offset(y: -40)
                 .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
             }
 
+            // The pin icon - this remains at the bottom of the VStack
             Button(action: onToggle) {
                 ZStack {
                     Circle()
@@ -95,6 +95,8 @@ struct StationAnnotationView: View {
             }
             .buttonStyle(.plain)
         }
+        // Since Annotation uses anchor: .bottom, the bottom of this VStack (the pin)
+        // will stay exactly on the coordinate, and the popover will expand upwards.
         .zIndex(isExpanded ? 1 : 0)
     }
 }
