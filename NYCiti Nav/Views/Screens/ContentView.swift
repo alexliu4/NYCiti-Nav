@@ -11,12 +11,27 @@ struct ContentView: View {
         )
     )
 
+    // State to manage which station's popover is currently open
+    @State private var selectedStationID: String?
+
     var body: some View {
         Map(position: $cameraPosition) {
             ForEach(dataManager.stations) { station in
                 if station.lines.count > 1 {
                     Annotation(station.name, coordinate: station.coordinate) {
-                        StationAnnotationView(station: station)
+                        StationAnnotationView(
+                            station: station,
+                            isExpanded: selectedStationID == station.id,
+                            onToggle: {
+                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                                    if selectedStationID == station.id {
+                                        selectedStationID = nil
+                                    } else {
+                                        selectedStationID = station.id
+                                    }
+                                }
+                            }
+                        )
                     }
                 } else {
                     let label = "\(station.name) (\(station.lines.first ?? ""))"
@@ -27,23 +42,29 @@ struct ContentView: View {
         }
         .mapStyle(.standard)
         .ignoresSafeArea()
+        .onTapGesture {
+            // Close any open popover when tapping the map background
+            withAnimation {
+                selectedStationID = nil
+            }
+        }
     }
 }
 
 struct StationAnnotationView: View {
     let station: SubwayStation
-    @State private var showDetails = false
+    let isExpanded: Bool
+    let onToggle: () -> Void
 
     var body: some View {
         VStack(spacing: 4) {
-            if showDetails {
+            if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(station.name)
                         .font(.subheadline)
                         .bold()
                         .fixedSize(horizontal: false, vertical: true)
 
-                    // Simple grid for lines to avoid complexity of custom FlowLayout
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 22))], spacing: 4) {
                         ForEach(station.lines, id: \.self) { line in
                             Text(line)
@@ -63,11 +84,7 @@ struct StationAnnotationView: View {
                 .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
             }
 
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    showDetails.toggle()
-                }
-            } label: {
+            Button(action: onToggle) {
                 ZStack {
                     Circle()
                         .fill(station.primaryColor)
@@ -81,7 +98,7 @@ struct StationAnnotationView: View {
             }
             .buttonStyle(.plain)
         }
-        .zIndex(showDetails ? 1 : 0)
+        .zIndex(isExpanded ? 1 : 0)
     }
 }
 
