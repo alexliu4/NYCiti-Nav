@@ -4,8 +4,6 @@ import MapKit
 struct ContentView: View {
     @Environment(StationDataManager.self) private var dataManager
 
-    // Initial camera position centered on Bryant Park
-    // Future: Center at user's current location
     @State private var cameraPosition: MapCameraPosition = .camera(
         MapCamera(
             centerCoordinate: CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840),
@@ -15,18 +13,15 @@ struct ContentView: View {
 
     var body: some View {
         Map(position: $cameraPosition) {
-            ForEach(dataManager.stations.indices, id: \.self) { index in
-                let station = dataManager.stations[index]
-                let label = "\(station.name) (\(station.lines.joined(separator: ", ")))"
-
-                // Alternate between Marker and Annotation (half and half)
-                if index % 2 == 0 {
-                    Marker(label, coordinate: station.coordinate)
-                        .tint(station.primaryColor)
-                } else {
+            ForEach(dataManager.stations) { station in
+                if station.lines.count > 1 {
                     Annotation(station.name, coordinate: station.coordinate) {
                         StationAnnotationView(station: station)
                     }
+                } else {
+                    let label = "\(station.name) (\(station.lines.first ?? ""))"
+                    Marker(label, coordinate: station.coordinate)
+                        .tint(station.primaryColor)
                 }
             }
         }
@@ -40,32 +35,53 @@ struct StationAnnotationView: View {
     @State private var showDetails = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 4) {
             if showDetails {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(station.name)
-                        .font(.caption)
+                        .font(.subheadline)
                         .bold()
-                    Text("Lines: \(station.lines.joined(separator: ", "))")
-                        .font(.system(size: 10))
-                }
-                .padding(8)
-                .background(Color(.systemBackground))
-                .cornerRadius(8)
-                .shadow(radius: 4)
-                .transition(.scale.combined(with: .opacity))
-            }
+                        .fixedSize(horizontal: false, vertical: true)
 
-            Image(systemName: "mappin.circle.fill")
-                .font(.title)
-                .foregroundColor(station.primaryColor)
-                .background(Color.white.clipShape(Circle()))
-                .onTapGesture {
-                    withAnimation(.spring()) {
-                        showDetails.toggle()
+                    // Simple grid for lines to avoid complexity of custom FlowLayout
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 22))], spacing: 4) {
+                        ForEach(station.lines, id: \.self) { line in
+                            Text(line)
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 22, height: 22)
+                                .background(SubwayStation.color(for: line))
+                                .clipShape(Circle())
+                        }
                     }
                 }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4))
+                .frame(width: 160)
+                .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
+            }
+
+            Button {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    showDetails.toggle()
+                }
+            } label: {
+                ZStack {
+                    Circle()
+                        .fill(station.primaryColor)
+                        .frame(width: 32, height: 32)
+                    Image(systemName: "tram.fill")
+                        .foregroundColor(.white)
+                        .font(.system(size: 16))
+                }
+                .overlay(Circle().stroke(Color.white, lineWidth: 2))
+                .shadow(radius: 2)
+            }
+            .buttonStyle(.plain)
         }
+        .zIndex(showDetails ? 1 : 0)
     }
 }
 
