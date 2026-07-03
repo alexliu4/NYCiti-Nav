@@ -22,6 +22,36 @@ struct SubwayStation: Codable, Identifiable {
         return .blue
     }
 
+    /// Returns the subway lines sorted by canonical MTA groupings and colors
+    var sortedLines: [String] {
+        lines.sorted { lineA, lineB in
+            let rankA = SubwayStation.sortRank(for: lineA)
+            let rankB = SubwayStation.sortRank(for: lineB)
+
+            if rankA != rankB {
+                return rankA < rankB
+            }
+            return lineA < lineB
+        }
+    }
+
+    /// Provides a numerical rank for sorting lines by their MTA groups/colors
+    private static func sortRank(for line: String) -> Int {
+        switch line.uppercased() {
+        case "1", "2", "3": return 1 // Red
+        case "4", "5", "6": return 2 // Green
+        case "7":           return 3 // Purple
+        case "A", "C", "E": return 4 // Blue
+        case "B", "D", "F", "M": return 5 // Orange
+        case "G":           return 6 // Lime
+        case "J", "Z":      return 7 // Brown
+        case "L":           return 8 // Gray
+        case "N", "Q", "R", "W": return 9 // Yellow
+        case "S":           return 10 // Dark Gray
+        default:            return 100
+        }
+    }
+
     static func color(for line: String) -> Color {
         switch line.uppercased() {
         case "1", "2", "3":

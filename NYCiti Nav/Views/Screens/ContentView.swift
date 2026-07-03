@@ -53,7 +53,6 @@ struct StationAnnotationView: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Popover - placed in a ZStack above the pin to avoid shifting the anchor
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(station.name)
@@ -61,8 +60,9 @@ struct StationAnnotationView: View {
                         .bold()
                         .fixedSize(horizontal: false, vertical: true)
 
+                    // Uses sortedLines for canonical MTA grouping
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 22))], spacing: 4) {
-                        ForEach(station.lines, id: \.self) { line in
+                        ForEach(station.sortedLines, id: \.self) { line in
                             Text(line)
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(.white)
@@ -77,11 +77,10 @@ struct StationAnnotationView: View {
                     .fill(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4))
                 .frame(width: 160)
-                .offset(y: -40) // Positioned strictly ABOVE the pin
+                .offset(y: -40)
                 .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
             }
 
-            // The pin icon - this is the anchor of the Annotation
             Button(action: onToggle) {
                 ZStack {
                     Circle()
