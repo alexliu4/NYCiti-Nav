@@ -4,6 +4,8 @@ import MapKit
 struct ContentView: View {
     @Environment(StationDataManager.self) private var dataManager
 
+    // Initial camera position centered on Bryant Park
+    // Future: Center at user's current location (comment for the future)
     @State private var cameraPosition: MapCameraPosition = .camera(
         MapCamera(
             centerCoordinate: CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840),
@@ -11,7 +13,6 @@ struct ContentView: View {
         )
     )
 
-    // State to manage which station's popover is currently open
     @State private var selectedStationID: String?
 
     var body: some View {
@@ -42,12 +43,6 @@ struct ContentView: View {
         }
         .mapStyle(.standard)
         .ignoresSafeArea()
-        .onTapGesture {
-            // Close any open popover when tapping the map background
-            withAnimation {
-                selectedStationID = nil
-            }
-        }
     }
 }
 
@@ -57,7 +52,8 @@ struct StationAnnotationView: View {
     let onToggle: () -> Void
 
     var body: some View {
-        VStack(spacing: 4) {
+        ZStack(alignment: .bottom) {
+            // Popover - placed in a ZStack above the pin to avoid shifting the anchor
             if isExpanded {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(station.name)
@@ -81,9 +77,11 @@ struct StationAnnotationView: View {
                     .fill(Color(.systemBackground))
                     .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4))
                 .frame(width: 160)
+                .offset(y: -40) // Positioned strictly ABOVE the pin
                 .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
             }
 
+            // The pin icon - this is the anchor of the Annotation
             Button(action: onToggle) {
                 ZStack {
                     Circle()
