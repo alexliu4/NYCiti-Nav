@@ -3,101 +3,91 @@ import MapKit
 
 struct ContentView: View {
     @Environment(StationDataManager.self) private var dataManager
+    @State private var routingEngine = RoutingEngine()
 
-    // Initial camera position centered on Bryant Park
-    // Future: Center at user's current location (comment for the future)
-    @State private var cameraPosition: MapCameraPosition = .camera(
-        MapCamera(
-            centerCoordinate: CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840),
-            distance: 5000
-        )
-    )
-
+    @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var selectedStationID: String?
 
+    // Mock user location in Bryant Park for demonstration
+    let userLocation = CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840)
+
     var body: some View {
-        Map(position: $cameraPosition) {
-            ForEach(dataManager.stations) { station in
-                if station.lines.count > 1 {
-                    // Use anchor .bottom to keep the base pin at the coordinate
-                    Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
-                        StationAnnotationView(
-                            station: station,
-                            isExpanded: selectedStationID == station.id,
-                            onToggle: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    if selectedStationID == station.id {
-                                        selectedStationID = nil
-                                    } else {
-                                        selectedStationID = station.id
-                                    }
-                                }
-                            }
-                        )
+        ZStack(alignment: .bottom) {
+            Map(position: $cameraPosition) {
+                // User Location Marker
+                Marker("Current Location", systemImage: "person.fill", coordinate: userLocation)
+                    .tint(.blue)
+
+                // Show all stations
+                ForEach(dataManager.stations) { station in
+                    if station.lines.count > 1 {
+                        Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
+                            StationAnnotationView(
+                                station: station,
+                                isExpanded: selectedStationID == station.id,
+                                onToggle: { toggleStation(station.id) }
+                            )
+                        }
+                    } else {
+                        Marker(station.name, coordinate: station.coordinate)
+                            .tint(station.primaryColor)
                     }
-                } else {
-                    let label = "\(station.name) (\(station.lines.first ?? ""))"
-                    Marker(label, coordinate: station.coordinate)
-                        .tint(station.primaryColor)
                 }
-            }
-        }
-        .mapStyle(.standard)
-        .ignoresSafeArea()
-    }
-}
 
-struct StationAnnotationView: View {
-    let station: SubwayStation
-    let isExpanded: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        VStack(spacing: 4) {
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(station.name)
-                        .font(.subheadline)
-                        .bold()
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 22))], spacing: 4) {
-                        ForEach(station.sortedLines, id: \.self) { line in
-                            Text(line)
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 22, height: 22)
-                                .background(SubwayStation.color(for: line))
-                                .clipShape(Circle())
+                // Route Specific Components
+                if let selectedRoute = routingEngine.selectedRoute {
+                    // Citi Bike Dock Annotation
+                    if let dock = selectedRoute.startDock, let dLat = dock.lat, let dLon = dock.lon {
+                        Annotation("Citi Bike Dock", coordinate: CLLocationCoordinate2D(latitude: dLat, longitude: dLon)) {
+                            Image(systemName: "bicycle.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.orange)
+                                .background(Color.white.clipShape(Circle()))
                         }
                     }
-                }
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4))
-                .frame(width: 160)
-                .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
-            }
 
-            // The pin icon - this remains at the bottom of the VStack
-            Button(action: onToggle) {
-                ZStack {
-                    Circle()
-                        .fill(station.primaryColor)
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "tram.fill")
-                        .foregroundColor(.white)
-                        .font(.system(size: 16))
+                    // Destination Station Marker (Highlighted)
+                    Marker(selectedRoute.station.name, systemImage: "tram.fill", coordinate: selectedRoute.station.coordinate)
+                        .tint(.green)
+
+                    // Route Polyline
+                    if let polyline = routingEngine.activePolyline {
+                        MapPolyline(polyline)
+                            .stroke(.blue.opacity(0.6), lineWidth: 5)
+                    }
                 }
-                .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                .shadow(radius: 2)
             }
-            .buttonStyle(.plain)
+            .mapStyle(.standard)
+
+            // Route Summary Card
+            if !routingEngine.routes.isEmpty {
+                RouteSummaryCard(
+                    routes: routingEngine.routes,
+                    selectedRoute: $routingEngine.selectedRoute,
+                    onSelect: { route in
+                        routingEngine.selectRoute(route)
+                        withAnimation {
+                            cameraPosition = .automatic
+                        }
+                    }
+                )
+                .transition(.move(edge: .bottom))
+            }
         }
-        // Since Annotation uses anchor: .bottom, the bottom of this VStack (the pin)
-        // will stay exactly on the coordinate, and the popover will expand upwards.
-        .zIndex(isExpanded ? 1 : 0)
+        .ignoresSafeArea()
+        .task {
+            await routingEngine.calculateRoutes(userLocation: userLocation, availableStations: dataManager.stations)
+        }
+    }
+
+    private func toggleStation(_ id: String) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            if selectedStationID == id {
+                selectedStationID = nil
+            } else {
+                selectedStationID = id
+            }
+        }
     }
 }
 
