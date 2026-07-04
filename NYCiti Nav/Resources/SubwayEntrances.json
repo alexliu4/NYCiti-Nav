@@ -1,0 +1,72 @@
+[
+  {
+    "id": "1",
+    "name": "Union Square",
+    "lines": ["L", "N", "Q", "R", "W", "4", "5", "6"],
+    "lat": 40.7346,
+    "lon": -73.9903
+  },
+  {
+    "id": "2",
+    "name": "Bedford Ave",
+    "lines": ["L"],
+    "lat": 40.7173,
+    "lon": -73.9568
+  },
+  {
+    "id": "3",
+    "name": "34th St-Herald Sq",
+    "lines": ["B", "D", "F", "M", "N", "Q", "R", "W"],
+    "lat": 40.7497,
+    "lon": -73.9878
+  },
+  {
+    "id": "4",
+    "name": "Times Sq-42 St",
+    "lines": ["N", "Q", "R", "W", "S", "1", "2", "3", "7"],
+    "lat": 40.7559,
+    "lon": -73.9867
+  },
+  {
+    "id": "5",
+    "name": "Grand Central-42 St",
+    "lines": ["S", "4", "5", "6", "7"],
+    "lat": 40.7527,
+    "lon": -73.9772
+  },
+  {
+    "id": "6",
+    "name": "Bryant Park-42 St",
+    "lines": ["B", "D", "F", "M", "7"],
+    "lat": 40.7549,
+    "lon": -73.9840
+  },
+  {
+    "id": "7",
+    "name": "W 4 St-Wash Sq",
+    "lines": ["A", "B", "C", "D", "E", "F", "M"],
+    "lat": 40.7323,
+    "lon": -74.0005
+  },
+  {
+    "id": "8",
+    "name": "Fulton St",
+    "lines": ["A", "C", "J", "Z", "2", "3", "4", "5"],
+    "lat": 40.7103,
+    "lon": -74.0065
+  },
+  {
+    "id": "9",
+    "name": "Atlantic Av-Barclays Ctr",
+    "lines": ["B", "Q", "2", "3", "4", "5", "D", "N", "R"],
+    "lat": 40.6844,
+    "lon": -73.9785
+  },
+  {
+    "id": "10",
+    "name": "Columbus Circle",
+    "lines": ["A", "B", "C", "D", "1"],
+    "lat": 40.7681,
+    "lon": -73.9819
+  }
+]
