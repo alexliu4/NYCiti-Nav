@@ -12,16 +12,14 @@ class RoutingEngine {
     var selectedRoute: MultimodalRoute?
     var activePolyline: MKPolyline?
 
-    func calculateRoutes(userLocation: CLLocationCoordinate2D, availableStations: [SubwayStation]) async {
+    func calculateRoutes(userLocation: CLLocationCoordinate2D, destination: CLLocationCoordinate2D? = nil, availableStations: [SubwayStation]) async {
         do {
             let transitData = try await fetchTransitData(lat: userLocation.latitude, lon: userLocation.longitude)
 
-            // Mocking Citi Bike docks near user
             let docksWithCoords = transitData.bikeStations.map { dock -> BikeStationProxy in
                 var d = dock
-                // Spread them out slightly
-                let offsetLat = Double.random(in: -0.003...0.003)
-                let offsetLon = Double.random(in: -0.003...0.003)
+                let offsetLat = Double.random(in: -0.001...0.001)
+                let offsetLon = Double.random(in: -0.001...0.001)
                 d.lat = userLocation.latitude + offsetLat
                 d.lon = userLocation.longitude + offsetLon
                 return d
@@ -32,7 +30,6 @@ class RoutingEngine {
             var calculatedOptions: [MultimodalRoute] = []
 
             for station in availableStations {
-                // Time to reach the station = Walking to Dock + Cycling to Station
                 let walkToDockDuration = bestDock != nil ? estimateWalkDuration(from: userLocation, to: CLLocationCoordinate2D(latitude: bestDock!.lat!, longitude: bestDock!.lon!)) : 0
                 let bikeToStationDuration = bestDock != nil ? estimateBikeDuration(from: CLLocationCoordinate2D(latitude: bestDock!.lat!, longitude: bestDock!.lon!), to: station.coordinate) : estimateWalkDuration(from: userLocation, to: station.coordinate)
 
@@ -48,23 +45,18 @@ class RoutingEngine {
 
                 let now = transitData.lastUpdated
 
-                // Find first train >= timeToPlatform
                 let validArrival = allArrivals.first { arrivalTimestamp in
                     let secondsToArrival = TimeInterval(arrivalTimestamp - now)
-                    return secondsToArrival >= (timeToPlatform / 60) // Proxy uses minutes? Prompt example: 8 > 3.
-                    // Wait, prompt says: "12 - 8 = 4 minutes". Timestamps are usually large.
-                    // If timestamps are Unix, then we need seconds.
+                    return secondsToArrival >= timeToPlatform
                 }
 
                 if let arrival = validArrival {
                     let secondsToArrival = TimeInterval(arrival - now)
-                    // If the proxy returns minutes instead of seconds, adjust.
-                    // The prompt example [3, 12, 22] looks like minutes relative to now.
-                    // But the JSON example 1783097128 is a Unix timestamp.
-                    // Let's assume Unix timestamps for logic.
-
                     let platformWait = secondsToArrival - timeToPlatform
 
+                    // In a final multi-modal implementation, the train ride duration would be
+                    // calculated to the destination's nearest station.
+                    // For this sprint, we maintain the baseline.
                     let totalTrip = timeToPlatform + platformWait + trainRideBaseline
 
                     let route = MultimodalRoute(
@@ -72,7 +64,7 @@ class RoutingEngine {
                         station: station,
                         startDock: bestDock,
                         totalTripDuration: totalTrip,
-                        bikeDuration: timeToPlatform, // In this context, total time to station
+                        bikeDuration: timeToPlatform,
                         platformWaitDuration: platformWait,
                         trainRideDuration: trainRideBaseline
                     )
@@ -104,7 +96,7 @@ class RoutingEngine {
         let request = MKDirections.Request()
         request.source = MKMapItem(placemark: MKPlacemark(coordinate: CLLocationCoordinate2D(latitude: dockLat, longitude: dockLon)))
         request.destination = MKMapItem(placemark: MKPlacemark(coordinate: route.station.coordinate))
-        request.transportType = .automobile // Better polyline for bike than .transit
+        request.transportType = .automobile
 
         let directions = MKDirections(request: request)
         do {
@@ -136,12 +128,12 @@ class RoutingEngine {
     private func estimateBikeDuration(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> TimeInterval {
         let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
-        return startLoc.distance(from: endLoc) / 5.36 // ~12 mph
+        return startLoc.distance(from: endLoc) / 5.36
     }
 
     private func estimateWalkDuration(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> TimeInterval {
         let startLoc = CLLocation(latitude: start.latitude, longitude: start.longitude)
         let endLoc = CLLocation(latitude: end.latitude, longitude: end.longitude)
-        return startLoc.distance(from: endLoc) / 1.4 // ~3.1 mph
+        return startLoc.distance(from: endLoc) / 1.4
     }
 }
