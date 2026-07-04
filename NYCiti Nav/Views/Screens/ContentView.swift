@@ -14,7 +14,7 @@ struct ContentView: View {
     let userLocation = CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840)
 
     var body: some View {
-        ZStack(alignment: .top) {
+        ZStack(alignment: .bottom) {
             Map(position: $cameraPosition) {
                 Marker("Current Location", systemImage: "person.fill", coordinate: userLocation)
                     .tint(.blue)
@@ -58,32 +58,14 @@ struct ContentView: View {
             .mapStyle(.standard)
             .ignoresSafeArea()
             .onTapGesture {
-                isShowingSearchCompletions = false
-                selectedStationID = nil
+                withAnimation {
+                    isShowingSearchCompletions = false
+                    selectedStationID = nil
+                }
             }
 
-            // Search UI
+            // Bottom UI Stack
             VStack(spacing: 0) {
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                    TextField("Search NYC destinations...", text: $searchViewModel.searchQuery, onEditingChanged: { isEditing in
-                        isShowingSearchCompletions = isEditing
-                    })
-                    .textFieldStyle(.plain)
-                    if !searchViewModel.searchQuery.isEmpty {
-                        Button(action: { searchViewModel.searchQuery = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                .padding()
-                .background(Color(.systemBackground))
-                .cornerRadius(12)
-                .shadow(radius: 5)
-                .padding()
-
                 if isShowingSearchCompletions && !searchViewModel.completions.isEmpty {
                     List(searchViewModel.completions, id: \.self) { completion in
                         VStack(alignment: .leading) {
@@ -101,16 +83,38 @@ struct ContentView: View {
                     .listStyle(.plain)
                     .frame(maxHeight: 300)
                     .background(Color(.systemBackground))
-                    .cornerRadius(12)
+                    .cornerRadius(12, corners: [.topLeft, .topRight])
                     .padding(.horizontal)
                     .shadow(radius: 5)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-            }
 
-            // Route Summary Card
-            VStack {
-                Spacer()
-                if !routingEngine.routes.isEmpty {
+                // Search Bar at the bottom
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.gray)
+                    TextField("Search NYC destinations...", text: $searchViewModel.searchQuery, onEditingChanged: { isEditing in
+                        withAnimation {
+                            isShowingSearchCompletions = isEditing
+                        }
+                    })
+                    .textFieldStyle(.plain)
+                    if !searchViewModel.searchQuery.isEmpty {
+                        Button(action: { searchViewModel.searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(isShowingSearchCompletions ? 0 : 12, corners: [.topLeft, .topRight])
+                .cornerRadius(12, corners: [.bottomLeft, .bottomRight])
+                .shadow(radius: 5)
+                .padding()
+
+                // Route Summary Card
+                if !routingEngine.routes.isEmpty && !isShowingSearchCompletions {
                     RouteSummaryCard(
                         routes: routingEngine.routes,
                         selectedRoute: $routingEngine.selectedRoute,
@@ -125,14 +129,20 @@ struct ContentView: View {
     }
 
     private func selectCompletion(_ completion: MKLocalSearchCompletion) {
-        isShowingSearchCompletions = false
+        withAnimation {
+            isShowingSearchCompletions = false
+        }
         searchViewModel.searchQuery = completion.title
 
         let searchRequest = MKLocalSearch.Request(completion: completion)
         let search = MKLocalSearch(request: searchRequest)
 
         search.start { response, error in
-            guard let coordinate = response?.mapItems.first?.placemark.coordinate else { return }
+            // For Xcode 26.3 / iOS 17+, we can use the placemark coordinate.
+            // MKMapItem.placemark is not deprecated, but some initialization methods might be.
+            // MKPlacemark itself is fine for coordinate access.
+            guard let mapItem = response?.mapItems.first else { return }
+            let coordinate = mapItem.placemark.coordinate
 
             self.destinationCoordinate = coordinate
             Task {
