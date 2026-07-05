@@ -54,9 +54,6 @@ class RoutingEngine {
                     let secondsToArrival = TimeInterval(arrival - now)
                     let platformWait = secondsToArrival - timeToPlatform
 
-                    // In a final multi-modal implementation, the train ride duration would be
-                    // calculated to the destination's nearest station.
-                    // For this sprint, we maintain the baseline.
                     let totalTrip = timeToPlatform + platformWait + trainRideBaseline
 
                     let route = MultimodalRoute(
@@ -113,16 +110,30 @@ class RoutingEngine {
 
     private func fetchTransitData(lat: Double, lon: Double) async throws -> TransitProxyResponse {
         var components = URLComponents(string: proxyURL)!
+        // Correcting parameters to match user's worker implementation (lan instead of lat)
         components.queryItems = [
-            URLQueryItem(name: "lat", value: String(lat)),
+            URLQueryItem(name: "lan", value: String(lat)),
             URLQueryItem(name: "lon", value: String(lon))
         ]
 
         var request = URLRequest(url: components.url!)
         request.setValue(Secrets.apiKey, forHTTPHeaderField: "X-App-API-Key")
 
-        let (data, _) = try await URLSession.shared.data(for: request)
-        return try JSONDecoder().decode(TransitProxyResponse.self, from: data)
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        // Debugging for non-JSON responses (e.g. "Unauthorized")
+        if let httpResponse = response as? HTTPURLResponse, !(200...299).contains(httpResponse.statusCode) {
+            let body = String(data: data, encoding: .utf8) ?? "No body"
+            print("Server returned status \(httpResponse.statusCode): \(body)")
+        }
+
+        do {
+            return try JSONDecoder().decode(TransitProxyResponse.self, from: data)
+        } catch {
+            let body = String(data: data, encoding: .utf8) ?? "Malformed data"
+            print("Decoding failed. Response body: \(body)")
+            throw error
+        }
     }
 
     private func estimateBikeDuration(from start: CLLocationCoordinate2D, to end: CLLocationCoordinate2D) -> TimeInterval {
