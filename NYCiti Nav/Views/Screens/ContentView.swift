@@ -9,12 +9,13 @@ struct ContentView: View {
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var selectedStationID: String?
     @State private var destinationCoordinate: CLLocationCoordinate2D?
-    @State private var isShowingSearchCompletions = false
+    @FocusState private var isSearchFieldFocused: Bool
 
     let userLocation = CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840)
 
     var body: some View {
-        ZStack(alignment: .bottom) {
+        ZStack(alignment: .top) {
+            // 1. Primary Map Layer
             Map(position: $cameraPosition) {
                 Marker("Current Location", systemImage: "person.fill", coordinate: userLocation)
                     .tint(.blue)
@@ -58,67 +59,71 @@ struct ContentView: View {
             .mapStyle(.standard)
             .ignoresSafeArea()
             .onTapGesture {
-                withAnimation {
-                    isShowingSearchCompletions = false
-                    selectedStationID = nil
-                }
+                isSearchFieldFocused = false
+                selectedStationID = nil
             }
 
-            // Bottom UI Stack
-            VStack(spacing: 0) {
-                if isShowingSearchCompletions && !searchViewModel.completions.isEmpty {
+            // 2. Search Presentation Layer
+            VStack(spacing: 12) {
+                // Search Bar Container
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+
+                    TextField("Search NYC destinations...", text: $searchViewModel.searchQuery)
+                        .focused($isSearchFieldFocused)
+                        .textFieldStyle(.plain)
+                        .onSubmit {
+                            performSearch(query: searchViewModel.searchQuery)
+                        }
+
+                    if !searchViewModel.searchQuery.isEmpty {
+                        Button(action: { searchViewModel.searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding()
+                .background(.regularMaterial)
+                .cornerRadius(12)
+                .shadow(radius: 5)
+                .padding(.horizontal)
+                .padding(.top, isSearchFieldFocused ? 10 : 0) // Adjust if needed for safe area
+
+                // 3. Search Suggestions List
+                if isSearchFieldFocused && !searchViewModel.searchQuery.isEmpty && !searchViewModel.completions.isEmpty {
                     List(searchViewModel.completions, id: \.self) { completion in
-                        VStack(alignment: .leading) {
+                        VStack(alignment: .leading, spacing: 4) {
                             Text(completion.title)
                                 .font(.subheadline)
+                                .bold()
                             Text(completion.subtitle)
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
-                        .listRowBackground(Color(.systemBackground))
+                        .listRowBackground(Color.clear)
+                        .contentShape(Rectangle())
                         .onTapGesture {
                             selectCompletion(completion)
                         }
                     }
                     .listStyle(.plain)
-                    .frame(maxHeight: 300)
-                    .background(Color(.systemBackground))
-                    .cornerRadius(12, corners: [.topLeft, .topRight])
+                    .frame(maxHeight: 400)
+                    .background(.thinMaterial)
+                    .cornerRadius(12)
                     .padding(.horizontal)
-                    .shadow(radius: 5)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .shadow(radius: 10)
                 }
+            }
+            // Move entire Search UI to bottom if NOT focused
+            .offset(y: isSearchFieldFocused ? 0 : UIScreen.main.bounds.height - 180)
+            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isSearchFieldFocused)
 
-                // Search Bar
-                HStack {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(.gray)
-                    TextField("Search NYC destinations...", text: $searchViewModel.searchQuery, onEditingChanged: { isEditing in
-                        withAnimation {
-                            isShowingSearchCompletions = isEditing
-                        }
-                    })
-                    .textFieldStyle(.plain)
-                    .onSubmit {
-                        performSearch(query: searchViewModel.searchQuery)
-                    }
-
-                    if !searchViewModel.searchQuery.isEmpty {
-                        Button(action: { searchViewModel.searchQuery = "" }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.gray)
-                        }
-                    }
-                }
-                .padding()
-                .background(Color(.systemBackground))
-                .cornerRadius(isShowingSearchCompletions ? 0 : 12, corners: [.topLeft, .topRight])
-                .cornerRadius(12, corners: [.bottomLeft, .bottomRight])
-                .shadow(radius: 5)
-                .padding()
-
-                // Route Summary Card
-                if !routingEngine.routes.isEmpty && !isShowingSearchCompletions {
+            // 4. Route Summary Card (only when not searching)
+            if !isSearchFieldFocused && !routingEngine.routes.isEmpty {
+                VStack {
+                    Spacer()
                     RouteSummaryCard(
                         routes: routingEngine.routes,
                         selectedRoute: $routingEngine.selectedRoute,
@@ -128,15 +133,15 @@ struct ContentView: View {
                     )
                     .transition(.move(edge: .bottom))
                 }
+                .ignoresSafeArea()
             }
         }
     }
 
     private func selectCompletion(_ completion: MKLocalSearchCompletion) {
-        withAnimation {
-            isShowingSearchCompletions = false
-        }
         searchViewModel.searchQuery = completion.title
+        searchViewModel.completions = [] // Clear completions to hide list
+        isSearchFieldFocused = false
 
         let searchRequest = MKLocalSearch.Request(completion: completion)
         let search = MKLocalSearch(request: searchRequest)
@@ -149,14 +154,10 @@ struct ContentView: View {
 
     private func performSearch(query: String) {
         guard !query.isEmpty else { return }
-
-        withAnimation {
-            isShowingSearchCompletions = false
-        }
+        isSearchFieldFocused = false
 
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
-        // NYC Region lock
         let nycCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
         request.region = MKCoordinateRegion(center: nycCenter, span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5))
 
