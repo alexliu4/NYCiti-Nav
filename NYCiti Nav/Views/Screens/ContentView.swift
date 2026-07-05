@@ -89,7 +89,7 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
 
-                // Search Bar at the bottom
+                // Search Bar
                 HStack {
                     Image(systemName: "magnifyingglass")
                         .foregroundColor(.gray)
@@ -99,6 +99,10 @@ struct ContentView: View {
                         }
                     })
                     .textFieldStyle(.plain)
+                    .onSubmit {
+                        performSearch(query: searchViewModel.searchQuery)
+                    }
+
                     if !searchViewModel.searchQuery.isEmpty {
                         Button(action: { searchViewModel.searchQuery = "" }) {
                             Image(systemName: "xmark.circle.fill")
@@ -138,22 +142,43 @@ struct ContentView: View {
         let search = MKLocalSearch(request: searchRequest)
 
         search.start { response, error in
-            // For Xcode 26.3 / iOS 17+, we can use the placemark coordinate.
-            // MKMapItem.placemark is not deprecated, but some initialization methods might be.
-            // MKPlacemark itself is fine for coordinate access.
             guard let mapItem = response?.mapItems.first else { return }
-            let coordinate = mapItem.placemark.coordinate
+            processSearchResult(mapItem)
+        }
+    }
 
-            self.destinationCoordinate = coordinate
-            Task {
-                await routingEngine.calculateRoutes(
-                    userLocation: userLocation,
-                    destination: coordinate,
-                    availableStations: dataManager.stations
-                )
-                withAnimation {
-                    cameraPosition = .automatic
-                }
+    private func performSearch(query: String) {
+        guard !query.isEmpty else { return }
+
+        withAnimation {
+            isShowingSearchCompletions = false
+        }
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        // NYC Region lock
+        let nycCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        request.region = MKCoordinateRegion(center: nycCenter, span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5))
+
+        let search = MKLocalSearch(request: request)
+        search.start { response, error in
+            guard let mapItem = response?.mapItems.first else { return }
+            processSearchResult(mapItem)
+        }
+    }
+
+    private func processSearchResult(_ mapItem: MKMapItem) {
+        let coordinate = mapItem.placemark.coordinate
+        self.destinationCoordinate = coordinate
+
+        Task {
+            await routingEngine.calculateRoutes(
+                userLocation: userLocation,
+                destination: coordinate,
+                availableStations: dataManager.stations
+            )
+            withAnimation {
+                cameraPosition = .automatic
             }
         }
     }
