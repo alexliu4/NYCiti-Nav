@@ -9,11 +9,11 @@ This document tracks system-level errors and warnings encountered during develop
 
 ### Explanation
 An HTTP 400 Bad Request error indicates that the Cloudflare Worker was unable to process the request because it was malformed. For our transit proxy, this usually means:
-- The required query parameters (`lan` and `lon`) are missing or incorrectly named.
+- The required query parameters are missing or incorrectly named.
 - The coordinate values provided are out of range or malformed.
 
 ### Resolution
-- **Verify Parameters:** Ensure `RoutingEngine.fetchTransitData` is using the correct query parameter names as specified by the user's worker implementation (`lan` for latitude and `lon` for longitude).
+- **Verify Parameters:** Ensure `RoutingEngine.fetchTransitData` is using the correct query parameter names. While some versions of the worker might use `lan`, the standard and currently implemented parameter in the app is `lat` for latitude and `lon` for longitude.
 - **Check Values:** Ensure valid numeric strings are being passed for the latitude and longitude.
 
 ---

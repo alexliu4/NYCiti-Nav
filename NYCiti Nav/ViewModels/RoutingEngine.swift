@@ -127,8 +127,9 @@ class RoutingEngine {
 
     private func fetchTransitData(lat: Double, lon: Double) async throws -> TransitProxyResponse {
         var components = URLComponents(string: proxyURL)!
+        // Reverting to 'lat' as per standard convention and fixing the 400 error
         components.queryItems = [
-            URLQueryItem(name: "lan", value: String(lat)),
+            URLQueryItem(name: "lat", value: String(lat)),
             URLQueryItem(name: "lon", value: String(lon))
         ]
 
