@@ -5,6 +5,20 @@ This document tracks system-level errors and warnings encountered during develop
 ## 1. Network & Authentication Errors
 
 ### Error
+`Routing Error: Server returned error code 400.`
+
+### Explanation
+An HTTP 400 Bad Request error indicates that the Cloudflare Worker was unable to process the request because it was malformed. For our transit proxy, this usually means:
+- The required query parameters (`lan` and `lon`) are missing or incorrectly named.
+- The coordinate values provided are out of range or malformed.
+
+### Resolution
+- **Verify Parameters:** Ensure `RoutingEngine.fetchTransitData` is using the correct query parameter names as specified by the user's worker implementation (`lan` for latitude and `lon` for longitude).
+- **Check Values:** Ensure valid numeric strings are being passed for the latitude and longitude.
+
+---
+
+### Error
 `Server returned status 401: Unauthorized`
 `Decoding failed. Response body: Unauthorized`
 `Routing Error: DecodingError.dataCorrupted ... "Unexpected character 'U' around line 1, column 1."`
