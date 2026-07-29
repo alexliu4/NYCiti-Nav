@@ -3,106 +3,206 @@ import MapKit
 
 struct ContentView: View {
     @Environment(StationDataManager.self) private var dataManager
+    @State private var routingEngine = RoutingEngine()
+    @StateObject private var searchViewModel = SearchViewModel()
 
-    // Initial camera position centered on Bryant Park
-    // Future: Center at user's current location (comment for the future)
-    @State private var cameraPosition: MapCameraPosition = .camera(
-        MapCamera(
-            centerCoordinate: CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840),
-            distance: 5000
-        )
-    )
-
+    @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var selectedStationID: String?
+    @State private var destinationCoordinate: CLLocationCoordinate2D?
+    @FocusState private var isSearchFieldFocused: Bool
+
+    let userLocation = CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840)
 
     var body: some View {
-        Map(position: $cameraPosition) {
-            ForEach(dataManager.stations) { station in
-                if station.lines.count > 1 {
-                    // Use anchor .bottom to keep the base pin at the coordinate
-                    Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
-                        StationAnnotationView(
-                            station: station,
-                            isExpanded: selectedStationID == station.id,
-                            onToggle: {
-                                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                                    if selectedStationID == station.id {
-                                        selectedStationID = nil
-                                    } else {
-                                        selectedStationID = station.id
-                                    }
-                                }
-                            }
-                        )
+        ZStack(alignment: .top) {
+            // 1. Map Layer
+            Map(position: $cameraPosition) {
+                Marker("Start", systemImage: "person.fill", coordinate: userLocation)
+                    .tint(.blue)
+
+                if let dest = destinationCoordinate {
+                    Marker("Goal", systemImage: "flag.checkered", coordinate: dest)
+                        .tint(.red)
+                }
+
+                ForEach(dataManager.stations) { station in
+                    if station.lines.count > 1 {
+                        Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
+                            StationAnnotationView(
+                                station: station,
+                                isExpanded: selectedStationID == station.id,
+                                onToggle: { toggleStation(station.id) }
+                            )
+                        }
+                    } else {
+                        Marker(station.name, coordinate: station.coordinate)
+                            .tint(station.primaryColor)
                     }
-                } else {
-                    let label = "\(station.name) (\(station.lines.first ?? ""))"
-                    Marker(label, coordinate: station.coordinate)
-                        .tint(station.primaryColor)
+                }
+
+                if let selectedRoute = routingEngine.selectedRoute {
+                    if let dock = selectedRoute.startDock, let dLat = dock.lat, let dLon = dock.lon {
+                        Annotation("Start Bike", coordinate: CLLocationCoordinate2D(latitude: dLat, longitude: dLon)) {
+                            Image(systemName: "bicycle.circle.fill")
+                                .font(.title)
+                                .foregroundColor(.orange)
+                                .background(Color.white.clipShape(Circle()))
+                        }
+                    }
+
+                    if let polyline = routingEngine.activePolyline {
+                        MapPolyline(polyline)
+                            .stroke(.blue.opacity(0.7), lineWidth: 6)
+                    }
                 }
             }
-        }
-        .mapStyle(.standard)
-        .ignoresSafeArea()
-    }
-}
+            .mapStyle(.standard)
+            .ignoresSafeArea()
+            .onTapGesture {
+                isSearchFieldFocused = false
+                selectedStationID = nil
+            }
 
-struct StationAnnotationView: View {
-    let station: SubwayStation
-    let isExpanded: Bool
-    let onToggle: () -> Void
+            // 2. Search & Recommendations Overlay
+            VStack(spacing: 0) {
+                // Search Bar
+                HStack {
+                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+                    TextField("Where to?", text: $searchViewModel.searchQuery)
+                        .focused($isSearchFieldFocused)
+                        .textFieldStyle(.plain)
+                        .onSubmit {
+                            performSearch(query: searchViewModel.searchQuery)
+                        }
 
-    var body: some View {
-        VStack(spacing: 4) {
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(station.name)
-                        .font(.subheadline)
-                        .bold()
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 22))], spacing: 4) {
-                        ForEach(station.sortedLines, id: \.self) { line in
-                            Text(line)
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.white)
-                                .frame(width: 22, height: 22)
-                                .background(SubwayStation.color(for: line))
-                                .clipShape(Circle())
+                    if !searchViewModel.searchQuery.isEmpty {
+                        Button(action: { searchViewModel.searchQuery = "" }) {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
                         }
                     }
                 }
-                .padding(10)
-                .background(RoundedRectangle(cornerRadius: 12)
-                    .fill(Color(.systemBackground))
-                    .shadow(color: .black.opacity(0.15), radius: 8, x: 0, y: 4))
-                .frame(width: 160)
-                .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
-            }
+                .padding()
+                .background(.regularMaterial)
+                .cornerRadius(15)
+                .shadow(radius: 5)
+                .padding()
 
-            // The pin icon - this remains at the bottom of the VStack
-            Button(action: onToggle) {
-                ZStack {
-                    Circle()
-                        .fill(station.primaryColor)
-                        .frame(width: 32, height: 32)
-                    Image(systemName: "tram.fill")
-                        .foregroundColor(.white)
-                        .font(.system(size: 16))
+                // Recommendations / Completions
+                if isSearchFieldFocused && !searchViewModel.completions.isEmpty {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 15) {
+                            ForEach(searchViewModel.completions, id: \.self) { completion in
+                                Button {
+                                    selectCompletion(completion)
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(completion.title).font(.subheadline).bold()
+                                        Text(completion.subtitle).font(.caption).foregroundColor(.secondary)
+                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 8)
+                                }
+                                .buttonStyle(.plain)
+                                Divider()
+                            }
+                        }
+                        .padding()
+                    }
+                    .background(.thinMaterial)
+                    .cornerRadius(15)
+                    .padding(.horizontal)
+                    .frame(maxHeight: 350)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .overlay(Circle().stroke(Color.white, lineWidth: 2))
-                .shadow(radius: 2)
             }
-            .buttonStyle(.plain)
-        }
-        // Since Annotation uses anchor: .bottom, the bottom of this VStack (the pin)
-        // will stay exactly on the coordinate, and the popover will expand upwards.
-        .zIndex(isExpanded ? 1 : 0)
-    }
-}
+            .offset(y: isSearchFieldFocused ? 0 : UIScreen.main.bounds.height - 200)
+            .animation(.spring(response: 0.45, dampingFraction: 0.8), value: isSearchFieldFocused)
 
-#Preview {
-    let manager = StationDataManager()
-    ContentView()
-        .environment(manager)
+            // 3. Navigation / Route Summary Card
+            if !isSearchFieldFocused && !routingEngine.routes.isEmpty {
+                VStack {
+                    Spacer()
+                    RouteSummaryCard(
+                        routes: routingEngine.routes,
+                        selectedRoute: $routingEngine.selectedRoute,
+                        onSelect: { route in
+                            routingEngine.selectRoute(route)
+                        }
+                    )
+                }
+                .ignoresSafeArea()
+                .transition(.move(edge: .bottom))
+            }
+        }
+    }
+
+    private func selectCompletion(_ completion: MKLocalSearchCompletion) {
+        searchViewModel.searchQuery = completion.title
+        isSearchFieldFocused = false
+
+        let request = MKLocalSearch.Request(completion: completion)
+        let search = MKLocalSearch(request: request)
+        search.start { response, error in
+            guard let mapItem = response?.mapItems.first else { return }
+            initiateNavigation(to: mapItem)
+        }
+    }
+
+    private func performSearch(query: String) {
+        guard !query.isEmpty else { return }
+        isSearchFieldFocused = false
+
+        let request = MKLocalSearch.Request()
+        request.naturalLanguageQuery = query
+        let nycCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
+        request.region = MKCoordinateRegion(center: nycCenter, span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5))
+
+        let search = MKLocalSearch(request: request)
+        search.start { response, error in
+            guard let mapItem = response?.mapItems.first else { return }
+            initiateNavigation(to: mapItem)
+        }
+    }
+
+    private func initiateNavigation(to item: MKMapItem) {
+        let coordinate = item.placemark.coordinate
+        self.destinationCoordinate = coordinate
+
+        Task {
+            // Trigger calculation
+            await routingEngine.calculateRoutes(
+                userLocation: userLocation,
+                destination: coordinate,
+                availableStations: dataManager.stations
+            )
+
+            // Zoom to fit the entire trip
+            await MainActor.run {
+                withAnimation {
+                    fitMapToRoute()
+                }
+            }
+        }
+    }
+
+    private func fitMapToRoute() {
+        guard let dest = destinationCoordinate else { return }
+        let points = [userLocation, dest]
+        let rect = points.reduce(MKMapRect.null) { rect, coord in
+            let point = MKMapPoint(coord)
+            return rect.union(MKMapRect(origin: point, size: MKMapSize(width: 0.1, height: 0.1)))
+        }
+        // Simplified fit: use automatic for now as it handles dynamic items well
+        cameraPosition = .automatic
+    }
+
+    private func toggleStation(_ id: String) {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+            if selectedStationID == id {
+                selectedStationID = nil
+            } else {
+                selectedStationID = id
+            }
+        }
+    }
 }
