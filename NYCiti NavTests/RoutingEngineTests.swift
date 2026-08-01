@@ -6,8 +6,7 @@ final class RoutingEngineTests: XCTestCase {
 
     func testTimeMatchingLogic() {
         // Given
-        let station = SubwayStation(id: "123", name: "Test Station", lines: ["1"], lat: 40.7128, lon: -74.0060)
-        let bikeDuration: TimeInterval = 480 // 8 minutes (8 * 60)
+        let bikeDuration: TimeInterval = 480 // 8 minutes
         let now: Int64 = 1000
 
         let arrivalTimestamps: [Int64] = [
@@ -16,11 +15,10 @@ final class RoutingEngineTests: XCTestCase {
             now + (22 * 60)  // 2320
         ]
 
-        let validArrival = arrivalTimestamps.first { TimeInterval($0 - now) >= (bikeDuration / 60) }
-        // The logic in VM uses seconds, so if timestamps are seconds, bikeDuration should be seconds.
-        // If timestamps are Unix (seconds), bikeDuration should be seconds.
+        let validArrival = arrivalTimestamps.first { TimeInterval($0 - now) >= bikeDuration }
 
         XCTAssertNotNil(validArrival)
+        XCTAssertEqual(validArrival, now + (12 * 60))
     }
 
     func testRouteSorting() {
@@ -30,25 +28,59 @@ final class RoutingEngineTests: XCTestCase {
         let route1 = MultimodalRoute(
             id: "A",
             station: stationA,
+            destinationStation: stationB,
             startDock: nil,
-            totalTripDuration: 1200,
+            walkToDockDuration: 100,
             bikeDuration: 500,
             platformWaitDuration: 200,
-            trainRideDuration: 500
+            trainRideDuration: 500,
+            walkToDestinationDuration: 100,
+            totalTripDuration: 1400,
+            destinationLatitude: 0,
+            destinationLongitude: 0
         )
 
         let route2 = MultimodalRoute(
             id: "B",
             station: stationB,
+            destinationStation: stationA,
             startDock: nil,
-            totalTripDuration: 1000,
+            walkToDockDuration: 50,
             bikeDuration: 400,
             platformWaitDuration: 100,
-            trainRideDuration: 500
+            trainRideDuration: 500,
+            walkToDestinationDuration: 50,
+            totalTripDuration: 1100,
+            destinationLatitude: 0,
+            destinationLongitude: 0
         )
 
         let routes = [route1, route2].sorted(by: { $0.totalTripDuration < $1.totalTripDuration })
 
         XCTAssertEqual(routes.first?.id, "B", "Fastest route should be first")
+    }
+
+    func testMultimodalRouteCalculatedDuration() {
+        let station = SubwayStation(id: "1", name: "Union Square", lines: ["L"], lat: 40.7346, lon: -73.9903)
+        let destStation = SubwayStation(id: "2", name: "Bedford Ave", lines: ["L"], lat: 40.7173, lon: -73.9568)
+
+        let route = MultimodalRoute(
+            id: "UnionBedford",
+            station: station,
+            destinationStation: destStation,
+            startDock: nil,
+            walkToDockDuration: 120,
+            bikeDuration: 300,
+            platformWaitDuration: 180,
+            trainRideDuration: 420,
+            walkToDestinationDuration: 150,
+            totalTripDuration: 1170,
+            destinationLatitude: 40.7173,
+            destinationLongitude: -73.9568
+        )
+
+        XCTAssertEqual(route.totalTripDuration, 1170)
+        XCTAssertEqual(route.destinationCoordinate?.latitude, 40.7173)
+        XCTAssertEqual(route.destinationCoordinate?.longitude, -73.9568)
     }
 }

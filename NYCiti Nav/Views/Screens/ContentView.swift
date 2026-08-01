@@ -50,9 +50,24 @@ struct ContentView: View {
                         }
                     }
 
-                    if let polyline = routingEngine.activePolyline {
-                        MapPolyline(polyline)
-                            .stroke(.blue.opacity(0.7), lineWidth: 6)
+                    if let walkToDock = routingEngine.walkToDockPolyline {
+                        MapPolyline(walkToDock)
+                            .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [6, 6]))
+                    }
+
+                    if let bikeToStation = routingEngine.bikeToStationPolyline {
+                        MapPolyline(bikeToStation)
+                            .stroke(.blue.opacity(0.8), lineWidth: 6)
+                    }
+
+                    if let trainPoly = routingEngine.trainPolyline {
+                        MapPolyline(trainPoly)
+                            .stroke(selectedRoute.station.primaryColor, lineWidth: 8)
+                    }
+
+                    if let walkToDest = routingEngine.walkToDestPolyline {
+                        MapPolyline(walkToDest)
+                            .stroke(.gray.opacity(0.8), style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round, dash: [6, 6]))
                     }
                 }
             }

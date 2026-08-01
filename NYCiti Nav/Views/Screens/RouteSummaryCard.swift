@@ -31,11 +31,21 @@ struct RouteSummaryCard: View {
                         .bold()
 
                     HStack {
+                        if selected.walkToDockDuration > 0 {
+                            InstructionItem(icon: "figure.walk", duration: selected.walkToDockDuration, label: "Walk")
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                        }
+
                         InstructionItem(icon: "bicycle", duration: selected.bikeDuration, label: "Bike")
                         Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                         InstructionItem(icon: "clock", duration: selected.platformWaitDuration, label: "Wait")
                         Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
                         InstructionItem(icon: "tram.fill", duration: selected.trainRideDuration, label: "Train")
+
+                        if selected.walkToDestinationDuration > 0 {
+                            Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
+                            InstructionItem(icon: "figure.walk", duration: selected.walkToDestinationDuration, label: "Walk")
+                        }
                     }
 
                     Text("Total: \(Int(selected.totalTripDuration / 60)) min")
