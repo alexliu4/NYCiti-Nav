@@ -62,7 +62,7 @@ struct ContentView: View {
 
                     if let trainPoly = routingEngine.trainPolyline {
                         MapPolyline(trainPoly)
-                            .stroke(selectedRoute.station.primaryColor, lineWidth: 8)
+                            .stroke(routingEngine.selectedRoute?.station.primaryColor ?? .blue, lineWidth: 8)
                     }
 
                     if let walkToDest = routingEngine.walkToDestPolyline {

@@ -167,7 +167,8 @@ class RoutingEngine {
         // 2. Bike to Station (or walk directly if no dock)
         let bikeStart = dockCoord ?? userLoc
         let bikeEnd = route.station.coordinate
-        if let poly = await fetchPolyline(from: bikeStart, to: bikeEnd, transportType: .walking) {
+        let transportType: MKDirectionsTransportType = dockCoord != nil ? .automobile : .walking
+        if let poly = await fetchPolyline(from: bikeStart, to: bikeEnd, transportType: transportType) {
             await MainActor.run {
                 self.bikeToStationPolyline = poly
                 self.activePolyline = poly // Keep activePolyline for backwards compatibility
