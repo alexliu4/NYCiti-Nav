@@ -18,5 +18,5 @@ jobs:
         xcodebuild build \
           -project "NYCiti Nav.xcodeproj" \
           -scheme "NYCiti Nav" \
-          -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
+          -destination "generic/platform=iOS Simulator" \
           -quiet
