@@ -1,6 +1,7 @@
 import XCTest
 @testable import NYCiti_Nav
 
+@MainActor
 final class NYCiti_NavTests: XCTestCase {
 
     func testSubwayStationDecoding() throws {

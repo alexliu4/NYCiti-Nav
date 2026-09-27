@@ -1,109 +1,45 @@
 import SwiftUI
+import MapKit
 
 struct RouteSummaryCard: View {
-    let routes: [MultimodalRoute]
-    @Binding var selectedRoute: MultimodalRoute?
-    let onSelect: (MultimodalRoute) -> Void
+    let engine: RoutingEngine
+    let destination: String
+    let locationMessage: String?
+    let onRetry: () -> Void
+    let onNavigate: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Optimal Journeys")
-                .font(.headline)
-                .padding(.horizontal)
-
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 16) {
-                    ForEach(routes) { route in
-                        RouteOptionView(route: route, isSelected: selectedRoute?.id == route.id)
-                            .onTapGesture {
-                                onSelect(route)
-                            }
-                    }
-                }
-                .padding(.horizontal)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(destination).font(.headline).lineLimit(2)
+            Button(action: onNavigate) {
+                Label("Transit directions in Apple Maps", systemImage: "tram.fill")
+                    .frame(maxWidth: .infinity)
+            }.buttonStyle(.borderedProminent)
+            if engine.isLoading { ProgressView("Finding walking directions…") }
+            if let route = engine.walkingRoute {
+                Label("Walk · \(Int(ceil(route.expectedTravelTime / 60))) min", systemImage: "figure.walk")
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(Array(route.steps.enumerated()), id: \.offset) { _, step in
+                            if !step.instructions.isEmpty { Text(step.instructions).font(.caption) }
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }.frame(maxHeight: 110)
             }
-
-            if let selected = selectedRoute {
-                VStack(alignment: .leading, spacing: 8) {
-                    Divider()
-                    Text("Selected: \(selected.station.name)")
-                        .font(.subheadline)
-                        .bold()
-
-                    HStack {
-                        InstructionItem(icon: "bicycle", duration: selected.bikeDuration, label: "Bike")
-                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
-                        InstructionItem(icon: "clock", duration: selected.platformWaitDuration, label: "Wait")
-                        Image(systemName: "chevron.right").font(.caption).foregroundColor(.secondary)
-                        InstructionItem(icon: "tram.fill", duration: selected.trainRideDuration, label: "Train")
-                    }
-
-                    Text("Total: \(Int(selected.totalTripDuration / 60)) min")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
+            if let message = engine.errorMessage ?? locationMessage {
+                Text(message).font(.caption)
+                Button("Try again", action: onRetry)
             }
-        }
-        .padding(.vertical)
-        .background(Color(.systemBackground))
-        .cornerRadius(20, corners: [.topLeft, .topRight])
-        .shadow(radius: 10)
-    }
-}
-
-struct RouteOptionView: View {
-    let route: MultimodalRoute
-    let isSelected: Bool
-
-    var body: some View {
-        VStack(alignment: .leading) {
-            Text("\(Int(route.totalTripDuration / 60)) min")
-                .font(.title3)
-                .bold()
-            Text(route.station.name)
-                .font(.caption)
-                .lineLimit(1)
+            if let message = engine.transitMessage {
+                Text(message).font(.caption).foregroundStyle(.secondary)
+            } else if let data = engine.transitData {
+                Text("Live service data loaded for \(data.subwayTimes.count) subway stops. Transit itineraries open in Apple Maps.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .padding()
-        .frame(width: 120)
-        .background(isSelected ? Color.blue.opacity(0.1) : Color(.secondarySystemBackground))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-        )
-    }
-}
-
-struct InstructionItem: View {
-    let icon: String
-    let duration: TimeInterval
-    let label: String
-
-    var body: some View {
-        VStack(spacing: 2) {
-            Image(systemName: icon)
-            Text("\(Int(duration / 60))m")
-                .font(.caption2)
-                .bold()
-        }
-    }
-}
-
-extension View {
-    func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
-        clipShape( RoundedCorner(radius: radius, corners: corners) )
-    }
-}
-
-struct RoundedCorner: Shape {
-    var radius: CGFloat = .infinity
-    var corners: UIRectCorner = .allCorners
-
-    func path(in rect: CGRect) -> Path {
-        let path = UIBezierPath(roundedRect: rect, byRoundingCorners: corners, cornerRadii: CGSize(width: radius, height: radius))
-        return Path(path.cgPath)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal)
     }
 }

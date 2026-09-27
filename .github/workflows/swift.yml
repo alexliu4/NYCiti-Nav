@@ -13,10 +13,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build
+    - name: Build and test
       run: |
-        xcodebuild build \
+        xcodebuild test \
           -project "NYCiti Nav.xcodeproj" \
           -scheme "NYCiti Nav" \
           -destination "platform=iOS Simulator,name=iPhone 17,OS=latest" \
+          CODE_SIGNING_ALLOWED=NO \
           -quiet

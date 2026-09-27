@@ -7,14 +7,15 @@ This document tracks system-level errors and warnings encountered during develop
 ### Error
 `Routing Error: Server returned error code 400.`
 
-### Explanation
-An HTTP 400 Bad Request error indicates that the Cloudflare Worker was unable to process the request because it was malformed. For our transit proxy, this usually means:
-- The required query parameters are missing or incorrectly named.
-- The coordinate values provided are out of range or malformed.
+### Confirmed cause in this checkout (2026-09-23)
+
+`Secrets.plist` was absent. The hardcoded XOR fallback decoded to HTTP control characters. Sending the existing fallback value to the configured Worker reproduced HTTP 400; sending no key returned HTTP 401. The 400 is therefore reproducible with the malformed authentication header, without changing coordinate parameter names.
 
 ### Resolution
-- **Verify Parameters:** Ensure `RoutingEngine.fetchTransitData` is using the correct query parameter names. While some versions of the worker might use `lan`, the standard and currently implemented parameter in the app is `lat` for latitude and `lon` for longitude.
-- **Check Values:** Ensure valid numeric strings are being passed for the latitude and longitude.
+
+The invalid fallback has been removed. Configure a real `AppAPIKey` in the ignored `NYCiti Nav/Resources/Secrets.plist`, using `docs/Secrets.example.plist` as a template. The app validates the key before networking and displays HTTP/decoding failures instead of only logging them. It keeps `lat` and `lon`; the authenticated Worker contract still needs verification against its external source. Do not assume an arbitrary rename to `lan` fixes a 400.
+
+Walking directions and the Apple Maps transit handoff now work independently of Worker errors.
 
 ---
 
@@ -29,7 +30,7 @@ The "Unexpected character 'U'" error is a byproduct of the Cloudflare Worker ret
 ### Resolution
 1. **Check Secrets.plist:** Ensure `NYCiti Nav/Resources/Secrets.plist` exists and contains the correct `AppAPIKey` string.
 2. **Target Membership:** Verify that `Secrets.plist` is included in the App's **Target Membership** in Xcode so it is bundled with the application.
-3. **Obfuscation Sync:** If using the hardcoded fallback in `Secrets.swift`, ensure the `obfuscatedKeyBase64` string was generated using the matching `salt`.
+3. **No fallback:** Missing or invalid keys are now reported before networking. There is no embedded production key.
 
 ---
 
@@ -65,7 +66,6 @@ These are internal MapKit engine warnings related to tile rendering and geometry
 
 ---
 
-## 4. General Guidance
-To suppress noisy system-level logs in Xcode:
-- Edit Scheme -> Run -> Arguments -> Environment Variables
-- **Name:** `OS_ACTIVITY_MODE`, **Value:** `disable`
+## 4. Diagnostics
+
+Keep system logging enabled while investigating navigation failures. The app now separates location/search errors, walking-route errors, and Worker errors in the UI. An HTTP 200 response does not imply a valid itinerary: the old planner ignored the destination and fabricated coordinates and train durations. See README.md for the remaining multimodal routing requirements.

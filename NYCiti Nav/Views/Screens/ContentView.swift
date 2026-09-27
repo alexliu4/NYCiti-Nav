@@ -4,205 +4,155 @@ import MapKit
 struct ContentView: View {
     @Environment(StationDataManager.self) private var dataManager
     @State private var routingEngine = RoutingEngine()
+    @State private var location = LocationProvider()
     @StateObject private var searchViewModel = SearchViewModel()
-
-    @State private var cameraPosition: MapCameraPosition = .automatic
+    @State private var cameraPosition: MapCameraPosition = .region(MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
+        span: MKCoordinateSpan(latitudeDelta: 0.12, longitudeDelta: 0.12)))
     @State private var selectedStationID: String?
-    @State private var destinationCoordinate: CLLocationCoordinate2D?
+    @State private var destination: MKMapItem?
+    @State private var searchError: String?
+    @State private var searchID = UUID()
+    @State private var activeSearch: MKLocalSearch?
+    @State private var navigationTask: Task<Void, Never>?
     @FocusState private var isSearchFieldFocused: Bool
 
-    let userLocation = CLLocationCoordinate2D(latitude: 40.7549, longitude: -73.9840)
-
     var body: some View {
-        ZStack(alignment: .top) {
-            // 1. Map Layer
-            Map(position: $cameraPosition) {
-                Marker("Start", systemImage: "person.fill", coordinate: userLocation)
-                    .tint(.blue)
-
-                if let dest = destinationCoordinate {
-                    Marker("Goal", systemImage: "flag.checkered", coordinate: dest)
-                        .tint(.red)
-                }
-
-                ForEach(dataManager.stations) { station in
-                    if station.lines.count > 1 {
-                        Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
-                            StationAnnotationView(
-                                station: station,
-                                isExpanded: selectedStationID == station.id,
-                                onToggle: { toggleStation(station.id) }
-                            )
-                        }
-                    } else {
-                        Marker(station.name, coordinate: station.coordinate)
-                            .tint(station.primaryColor)
-                    }
-                }
-
-                if let selectedRoute = routingEngine.selectedRoute {
-                    if let dock = selectedRoute.startDock, let dLat = dock.lat, let dLon = dock.lon {
-                        Annotation("Start Bike", coordinate: CLLocationCoordinate2D(latitude: dLat, longitude: dLon)) {
-                            Image(systemName: "bicycle.circle.fill")
-                                .font(.title)
-                                .foregroundColor(.orange)
-                                .background(Color.white.clipShape(Circle()))
-                        }
-                    }
-
-                    if let polyline = routingEngine.activePolyline {
-                        MapPolyline(polyline)
-                            .stroke(.blue.opacity(0.7), lineWidth: 6)
-                    }
+        Map(position: $cameraPosition) {
+            UserAnnotation()
+            if let destination {
+                Marker(destination.name ?? "Destination", coordinate: destination.location.coordinate).tint(.red)
+            }
+            ForEach(dataManager.stations) { station in
+                Annotation(station.name, coordinate: station.coordinate, anchor: .bottom) {
+                    StationAnnotationView(station: station, isExpanded: selectedStationID == station.id,
+                                          onToggle: { selectedStationID = selectedStationID == station.id ? nil : station.id })
                 }
             }
-            .mapStyle(.standard)
-            .ignoresSafeArea()
-            .onTapGesture {
-                isSearchFieldFocused = false
-                selectedStationID = nil
+            if let route = routingEngine.walkingRoute {
+                MapPolyline(route.polyline).stroke(.blue, lineWidth: 6)
             }
-
-            // 2. Search & Recommendations Overlay
-            VStack(spacing: 0) {
-                // Search Bar
-                HStack {
-                    Image(systemName: "magnifyingglass").foregroundColor(.secondary)
-                    TextField("Where to?", text: $searchViewModel.searchQuery)
-                        .focused($isSearchFieldFocused)
-                        .textFieldStyle(.plain)
-                        .onSubmit {
-                            performSearch(query: searchViewModel.searchQuery)
-                        }
-
-                    if !searchViewModel.searchQuery.isEmpty {
-                        Button(action: { searchViewModel.searchQuery = "" }) {
-                            Image(systemName: "xmark.circle.fill").foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .padding()
-                .background(.regularMaterial)
-                .cornerRadius(15)
-                .shadow(radius: 5)
-                .padding()
-
-                // Recommendations / Completions
-                if isSearchFieldFocused && !searchViewModel.completions.isEmpty {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 15) {
-                            ForEach(searchViewModel.completions, id: \.self) { completion in
-                                Button {
-                                    selectCompletion(completion)
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(completion.title).font(.subheadline).bold()
-                                        Text(completion.subtitle).font(.caption).foregroundColor(.secondary)
-                                    }
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 8)
-                                }
-                                .buttonStyle(.plain)
-                                Divider()
-                            }
-                        }
-                        .padding()
-                    }
-                    .background(.thinMaterial)
-                    .cornerRadius(15)
-                    .padding(.horizontal)
-                    .frame(maxHeight: 350)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+        }
+        .mapStyle(.standard)
+        .safeAreaInset(edge: .top) { searchPanel }
+        .safeAreaInset(edge: .bottom) {
+            if !isSearchFieldFocused {
+                if let destination {
+                    RouteSummaryCard(engine: routingEngine, destination: destination.name ?? "Destination",
+                                     locationMessage: location.message,
+                                     onRetry: { location.requestLocation(); calculateRoute() },
+                                     onNavigate: { openTransitDirections(to: destination) })
+                } else if let message = location.message {
+                    Text(message).font(.caption).padding().background(.regularMaterial)
                 }
             }
-            .offset(y: isSearchFieldFocused ? 0 : UIScreen.main.bounds.height - 200)
-            .animation(.spring(response: 0.45, dampingFraction: 0.8), value: isSearchFieldFocused)
-
-            // 3. Navigation / Route Summary Card
-            if !isSearchFieldFocused && !routingEngine.routes.isEmpty {
-                VStack {
-                    Spacer()
-                    RouteSummaryCard(
-                        routes: routingEngine.routes,
-                        selectedRoute: $routingEngine.selectedRoute,
-                        onSelect: { route in
-                            routingEngine.selectRoute(route)
-                        }
-                    )
-                }
-                .ignoresSafeArea()
-                .transition(.move(edge: .bottom))
-            }
+        }
+        .onAppear { location.requestLocation() }
+        .onChange(of: location.coordinate?.latitude) { _, _ in calculateRoute() }
+        .onChange(of: location.coordinate?.longitude) { _, _ in calculateRoute() }
+        .onDisappear {
+            navigationTask?.cancel()
+            activeSearch?.cancel()
+            searchID = UUID()
+            routingEngine.reset()
         }
     }
 
-    private func selectCompletion(_ completion: MKLocalSearchCompletion) {
-        searchViewModel.searchQuery = completion.title
-        isSearchFieldFocused = false
-
-        let request = MKLocalSearch.Request(completion: completion)
-        let search = MKLocalSearch(request: request)
-        search.start { response, error in
-            guard let mapItem = response?.mapItems.first else { return }
-            initiateNavigation(to: mapItem)
-        }
+    private var searchPanel: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                TextField("Where to in NYC?", text: $searchViewModel.searchQuery)
+                    .focused($isSearchFieldFocused)
+                    .onSubmit { performSearch() }
+                if !searchViewModel.searchQuery.isEmpty {
+                    Button(action: clearDestination) { Image(systemName: "xmark.circle.fill") }
+                        .accessibilityLabel("Clear destination")
+                }
+            }
+            .padding().background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15))
+            if let searchError { Text(searchError).font(.caption).padding(8).background(.regularMaterial) }
+            if isSearchFieldFocused && !searchViewModel.completions.isEmpty {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(searchViewModel.completions, id: \.self) { completion in
+                            Button {
+                                searchViewModel.searchQuery = completion.title
+                                search(MKLocalSearch.Request(completion: completion))
+                            } label: {
+                                VStack(alignment: .leading) {
+                                    Text(completion.title).bold()
+                                    Text(completion.subtitle).font(.caption)
+                                }.frame(maxWidth: .infinity, alignment: .leading)
+                            }.buttonStyle(.plain)
+                        }
+                    }.padding()
+                }.frame(maxHeight: 260).background(.regularMaterial, in: RoundedRectangle(cornerRadius: 15))
+            }
+        }.padding()
     }
 
-    private func performSearch(query: String) {
-        guard !query.isEmpty else { return }
-        isSearchFieldFocused = false
-
+    private func performSearch() {
+        guard !searchViewModel.searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         let request = MKLocalSearch.Request()
-        request.naturalLanguageQuery = query
-        let nycCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
-        request.region = MKCoordinateRegion(center: nycCenter, span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5))
+        request.naturalLanguageQuery = searchViewModel.searchQuery
+        request.region = MKCoordinateRegion(center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
+                                            span: MKCoordinateSpan(latitudeDelta: 0.5, longitudeDelta: 0.5))
+        search(request)
+    }
 
+    private func search(_ request: MKLocalSearch.Request) {
+        activeSearch?.cancel()
+        navigationTask?.cancel()
+        routingEngine.reset()
+        destination = nil
+        searchID = UUID()
+        let id = searchID
+        searchError = nil
+        isSearchFieldFocused = false
         let search = MKLocalSearch(request: request)
+        activeSearch = search
         search.start { response, error in
-            guard let mapItem = response?.mapItems.first else { return }
-            initiateNavigation(to: mapItem)
+            guard id == searchID else { return }
+            guard let item = response?.mapItems.first else {
+                searchError = error?.localizedDescription ?? "No destination found. Try a more specific address."
+                return
+            }
+            destination = item
+            cameraPosition = .region(MKCoordinateRegion(center: item.location.coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02)))
+            calculateRoute()
         }
     }
 
-    private func initiateNavigation(to item: MKMapItem) {
-        let coordinate = item.placemark.coordinate
-        self.destinationCoordinate = coordinate
-
-        Task {
-            // Trigger calculation
-            await routingEngine.calculateRoutes(
-                userLocation: userLocation,
-                destination: coordinate,
-                availableStations: dataManager.stations
-            )
-
-            // Zoom to fit the entire trip
-            await MainActor.run {
-                withAnimation {
-                    fitMapToRoute()
-                }
+    private func calculateRoute() {
+        guard let destination, let origin = location.coordinate else { return }
+        navigationTask?.cancel()
+        navigationTask = Task {
+            await routingEngine.calculateRoutes(userLocation: origin, destination: destination.location.coordinate,
+                                                availableStations: dataManager.stations)
+            guard !Task.isCancelled else { return }
+            if let route = routingEngine.walkingRoute {
+                let rect = route.polyline.boundingMapRect
+                cameraPosition = .rect(rect.insetBy(dx: -max(rect.size.width * 0.15, 300),
+                                                   dy: -max(rect.size.height * 0.15, 300)))
             }
         }
     }
 
-    private func fitMapToRoute() {
-        guard let dest = destinationCoordinate else { return }
-        let points = [userLocation, dest]
-        let rect = points.reduce(MKMapRect.null) { rect, coord in
-            let point = MKMapPoint(coord)
-            return rect.union(MKMapRect(origin: point, size: MKMapSize(width: 0.1, height: 0.1)))
-        }
-        // Simplified fit: use automatic for now as it handles dynamic items well
-        cameraPosition = .automatic
+    private func clearDestination() {
+        activeSearch?.cancel()
+        searchID = UUID()
+        navigationTask?.cancel()
+        routingEngine.reset()
+        destination = nil
+        searchError = nil
+        searchViewModel.searchQuery = ""
     }
 
-    private func toggleStation(_ id: String) {
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-            if selectedStationID == id {
-                selectedStationID = nil
-            } else {
-                selectedStationID = id
-            }
-        }
+    private func openTransitDirections(to destination: MKMapItem) {
+        MKMapItem.openMaps(with: [.forCurrentLocation(), destination], launchOptions: [
+            MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeTransit
+        ])
     }
 }
